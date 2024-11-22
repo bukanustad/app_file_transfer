@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code File Transfer</title>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script> <!-- Library untuk membaca QR -->
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -128,7 +129,7 @@
       return new Promise((resolve, reject) => {
         setTimeout(() => {
           const uniqueID = Date.now().toString(36); // ID berbasis waktu
-          const shortURL = `${GITHUB_PAGES_URL}/files/${uniqueID}-${file.name}`;
+          const shortURL = `${GITHUB_PAGES_URL}files/${uniqueID}-${file.name}`;
           resolve(shortURL);
         }, 1000); // Simulate upload delay
       });
@@ -155,11 +156,40 @@
           const video = document.getElementById("video");
           video.srcObject = stream;
           video.play();
+          scanQRCode(video);
         })
         .catch((error) => {
           logDebug("Error starting camera: " + error.message);
           scannerStatus.textContent = "Camera access failed.";
         });
+    }
+
+    // Scan QR Code from Camera Stream
+    function scanQRCode(videoElement) {
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      function scan() {
+        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+          canvas.width = videoElement.videoWidth;
+          canvas.height = videoElement.videoHeight;
+          context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (code) {
+            logDebug("QR Code detected.");
+            window.location.href = code.data; // Redirect to the URL in QR Code
+          }
+        }
+
+        requestAnimationFrame(scan);
+      }
+
+      scan();
     }
 
     // Initialize in Sender Mode
