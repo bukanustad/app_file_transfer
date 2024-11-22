@@ -3,27 +3,176 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>File Transfer</title>
+  <title>File Transfer via QR Code</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-    .device-list { margin-top: 20px; }
-    .device-item { margin: 10px; }
-    button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
-    button:hover { background-color: #45a049; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #senderMode, #receiverMode {
+      display: none;
+    }
+    #qrcodeCanvas {
+      margin-top: 20px;
+    }
+    video {
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    #debugLog {
+      margin-top: 20px;
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 14px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
-  <h1>Send Files to Nearby Devices</h1>
-  <input type="file" id="fileInput">
-  <div class="device-list" id="deviceList">
-    <h3>Devices in Range:</h3>
-    <!-- Devices will be listed here -->
+
+  <h2>File Transfer via QR Code</h2>
+  
+  <!-- Switch Mode Button -->
+  <button id="switchButton">Switch to Receiver Mode</button>
+
+  <!-- Sender Mode -->
+  <div id="senderMode">
+    <h3>Sender Mode</h3>
+    <p>Select a file to send:</p>
+    <input type="file" id="fileInput"> <!-- Form Input for File -->
+    <canvas id="qrcodeCanvas"></canvas> <!-- Canvas for QR Code -->
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js"></script>
-  <script src="firebase-config.js"></script>
-  <script src="app.js"></script>
+  <!-- Receiver Mode -->
+  <div id="receiverMode">
+    <h3>Receiver Mode</h3>
+    <p>Scan the QR Code using your camera:</p>
+    <video id="video" autoplay></video> <!-- Video element for camera -->
+    <p id="errorMsg" style="color: red;"></p> <!-- Error message -->
+  </div>
+
+  <!-- Debugging Logs -->
+  <div id="debugLog">
+    <strong>Debug Logs:</strong>
+    <ul id="logList"></ul>
+  </div>
+
+  <script>
+    let isSenderMode = true; // Track current mode (true = sender, false = receiver)
+
+    const switchButton = document.getElementById('switchButton');
+    const senderMode = document.getElementById('senderMode');
+    const receiverMode = document.getElementById('receiverMode');
+    const fileInput = document.getElementById('fileInput');
+    const qrcodeCanvas = document.getElementById('qrcodeCanvas');
+    const video = document.getElementById('video');
+    const errorMsg = document.getElementById('errorMsg');
+    const debugLog = document.getElementById('logList');
+
+    // Function to log messages for debugging
+    function logDebug(message) {
+      const logItem = document.createElement('li');
+      logItem.textContent = message;
+      debugLog.appendChild(logItem);
+    }
+
+    // Switch between Sender and Receiver modes
+    switchButton.addEventListener('click', function() {
+      logDebug("Switch button clicked.");
+      isSenderMode = !isSenderMode;
+      updateMode();
+    });
+
+    // Ensure the button works for touch events on mobile
+    switchButton.addEventListener('touchstart', function(e) {
+      e.preventDefault(); // Prevent accidental triggering of other events
+      logDebug("Switch button touched.");
+      switchButton.click(); // Simulate a click
+    });
+
+    // Update UI based on mode
+    function updateMode() {
+      if (isSenderMode) {
+        stopCamera(); // Stop camera when switching to sender mode
+        switchButton.innerText = 'Switch to Receiver Mode';
+        senderMode.style.display = 'block';
+        receiverMode.style.display = 'none';
+        logDebug("Switched to Sender Mode.");
+      } else {
+        startCamera(); // Start camera when in receiver mode
+        switchButton.innerText = 'Switch to Sender Mode';
+        senderMode.style.display = 'none';
+        receiverMode.style.display = 'block';
+        logDebug("Switched to Receiver Mode.");
+      }
+    }
+
+    // Handle file selection and QR code generation
+    fileInput.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+
+      if (file) {
+        // Create a temporary URL for the file
+        const fileURL = URL.createObjectURL(file);
+        logDebug("File selected: " + file.name);
+
+        // Generate QR Code containing the file URL
+        QRCode.toCanvas(qrcodeCanvas, fileURL, { width: 200, height: 200 }, function(error) {
+          if (error) {
+            console.error("Error generating QR Code: ", error);
+            logDebug("Error generating QR Code: " + error.message);
+          } else {
+            logDebug("QR Code generated successfully.");
+          }
+        });
+      } else {
+        alert("No file selected. Please select a file to generate the QR Code.");
+        logDebug("No file selected.");
+      }
+    });
+
+    // Start camera for QR Code scanning
+    function startCamera() {
+      errorMsg.textContent = ''; // Clear any previous error message
+
+      // Access the camera
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          video.srcObject = stream;
+          logDebug("Camera started successfully.");
+        })
+        .catch((err) => {
+          console.error("Error accessing camera: ", err);
+          errorMsg.textContent = "Unable to access the camera. Please check your device settings.";
+          logDebug("Error accessing camera: " + err.message);
+        });
+    }
+
+    // Stop camera
+    function stopCamera() {
+      const stream = video.srcObject;
+      if (stream) {
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop());
+        video.srcObject = null;
+        logDebug("Camera stopped.");
+      }
+    }
+
+    // Initialize the app to show the sender mode by default
+    updateMode();
+  </script>
+
 </body>
 </html>
