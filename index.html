@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code File Transfer</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     body {
@@ -13,15 +12,15 @@
       margin: 0;
       padding: 0;
     }
-    video, canvas {
+    canvas, video {
       width: 100%;
       max-width: 400px;
       margin: 10px auto;
     }
-    .mode-toggle {
+    .mode-toggle, .actions {
       margin: 20px 0;
     }
-    .status, .log, .qrcode {
+    .log, .qrcode {
       margin: 10px auto;
       max-width: 400px;
       font-size: 0.9rem;
@@ -60,22 +59,18 @@
   <div id="receiverMode" style="display: none;">
     <h2>Receiver Mode</h2>
     <video id="video" autoplay></video>
-    <div class="status" id="scannerStatus">Initializing...</div>
+    <div class="log" id="scannerStatus">Initializing...</div>
   </div>
 
   <!-- Log -->
   <div class="log" id="log">Log will appear here...</div>
 
   <script>
-    // Global Variables
     let currentMode = "sender";
-    let video = document.getElementById("video");
-    let qrCanvas = document.getElementById("qrCanvas");
-    let fileInput = document.getElementById("fileInput");
-    let logContainer = document.getElementById("log");
-    let scannerStatus = document.getElementById("scannerStatus");
-    let stream;
-    let scanInterval;
+    const fileInput = document.getElementById("fileInput");
+    const qrCanvas = document.getElementById("qrCanvas");
+    const logContainer = document.getElementById("log");
+    const scannerStatus = document.getElementById("scannerStatus");
 
     // Helper: Log Debug Messages
     function logDebug(message) {
@@ -86,7 +81,7 @@
     }
 
     // Switch Mode
-    document.getElementById("switchMode").addEventListener("click", function () {
+    document.getElementById("switchMode").addEventListener("click", () => {
       if (currentMode === "sender") {
         switchToReceiverMode();
       } else {
@@ -100,7 +95,6 @@
       document.getElementById("receiverMode").style.display = "none";
       document.getElementById("switchMode").textContent = "Switch to Receiver Mode";
       currentMode = "sender";
-      stopCamera();
     }
 
     function switchToReceiverMode() {
@@ -108,86 +102,62 @@
       document.getElementById("senderMode").style.display = "none";
       document.getElementById("receiverMode").style.display = "block";
       document.getElementById("switchMode").textContent = "Switch to Sender Mode";
-      currentMode = "receiver";
       startCamera();
+    }
+
+    // QR Code Generation for File
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (file) {
+        logDebug(`File selected: ${file.name}`);
+        const fileURL = await uploadFile(file);
+        if (fileURL) {
+          logDebug("File uploaded successfully: " + fileURL);
+          generateQRCode(fileURL);
+        } else {
+          logDebug("File upload failed.");
+          document.getElementById("qrStatus").textContent = "File upload failed.";
+        }
+      }
+    });
+
+    // Mock File Upload Function
+    async function uploadFile(file) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          const mockURL = `https://example.com/files/${file.name}`;
+          resolve(mockURL);
+        }, 1000); // Simulate upload delay
+      });
+    }
+
+    // Generate QR Code
+    function generateQRCode(data) {
+      QRCode.toCanvas(qrCanvas, data, (error) => {
+        if (error) {
+          logDebug("Error generating QR Code: " + error.message);
+          document.getElementById("qrStatus").textContent = "Error generating QR Code.";
+        } else {
+          logDebug("QR Code generated successfully.");
+          document.getElementById("qrStatus").textContent = "QR Code generated.";
+        }
+      });
     }
 
     // Start Camera
     function startCamera() {
-      logDebug("Starting camera...");
       navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then((cameraStream) => {
+        .then((stream) => {
           logDebug("Camera started successfully.");
-          stream = cameraStream;
+          const video = document.getElementById("video");
           video.srcObject = stream;
           video.play();
-          startScanning();
         })
-        .catch((err) => {
-          logDebug("Error accessing camera: " + err.message);
-          scannerStatus.textContent = "Camera access failed!";
+        .catch((error) => {
+          logDebug("Error starting camera: " + error.message);
+          scannerStatus.textContent = "Camera access failed.";
         });
     }
-
-    // Stop Camera
-    function stopCamera() {
-      logDebug("Stopping camera...");
-      clearInterval(scanInterval);
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      video.srcObject = null;
-      scannerStatus.textContent = "Camera stopped.";
-    }
-
-    // QR Code Scanning
-    function startScanning() {
-      logDebug("Starting QR Code scanning...");
-      scannerStatus.textContent = "Scanning...";
-      scanInterval = setInterval(() => {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const qrCode = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
-
-          if (qrCode) {
-            logDebug("QR Code detected: " + qrCode.data);
-            scannerStatus.textContent = "QR Code Found!";
-            alert("QR Code Data: " + qrCode.data);
-            stopCamera();
-          } else {
-            scannerStatus.textContent = "Scanning...";
-          }
-        }
-      }, 500); // Scan every 500ms
-    }
-
-    // QR Code Generation
-    fileInput.addEventListener("change", function () {
-      const file = fileInput.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const fileData = e.target.result;
-          logDebug("File selected: " + file.name);
-          QRCode.toCanvas(qrCanvas, fileData, function (error) {
-            if (error) {
-              logDebug("Error generating QR Code: " + error.message);
-              document.getElementById("qrStatus").textContent = "Error generating QR Code.";
-            } else {
-              logDebug("QR Code generated successfully.");
-              document.getElementById("qrStatus").textContent = "QR Code generated.";
-            }
-          });
-        };
-        reader.readAsDataURL(file);
-      }
-    });
 
     // Initialize in Sender Mode
     switchToSenderMode();
