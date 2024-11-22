@@ -3,58 +3,113 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Scanner</title>
+  <title>QR Code File Transfer</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
+      margin: 0;
+      padding: 0;
     }
     video, canvas {
       width: 100%;
       max-width: 400px;
       margin: 10px auto;
     }
-    .status {
-      margin: 10px 0;
-      font-size: 1rem;
-      font-weight: bold;
-      color: #555;
+    .mode-toggle {
+      margin: 20px 0;
     }
-    .log {
-      margin-top: 20px;
-      text-align: left;
+    .status, .log, .qrcode {
+      margin: 10px auto;
       max-width: 400px;
-      margin: 0 auto;
-      font-size: 0.8rem;
-      color: #333;
-      background-color: #f8f8f8;
+      font-size: 0.9rem;
+      text-align: left;
       padding: 10px;
       border: 1px solid #ddd;
       border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    .log {
+      max-height: 150px;
       overflow-y: auto;
-      max-height: 200px;
+    }
+    #fileInput {
+      margin: 20px 0;
     }
   </style>
 </head>
 <body>
-  <h1>QR Code Scanner</h1>
-  <video id="video" autoplay></video>
-  <div class="status" id="scannerStatus">Initializing...</div>
-  <div class="log" id="log"></div>
-  <script>
-    let video = document.getElementById('video');
-    let scannerStatus = document.getElementById('scannerStatus');
-    let logContainer = document.getElementById('log');
-    let scanInterval;
-    let stream;
+  <h1>QR Code File Transfer</h1>
 
-    // Log Helper Function
+  <!-- Mode Toggle -->
+  <div class="mode-toggle">
+    <button id="switchMode">Switch to Receiver Mode</button>
+  </div>
+
+  <!-- Sender Mode -->
+  <div id="senderMode" style="display: block;">
+    <h2>Sender Mode</h2>
+    <input type="file" id="fileInput">
+    <canvas id="qrCanvas"></canvas>
+    <div class="qrcode" id="qrStatus">QR Code will be generated here.</div>
+  </div>
+
+  <!-- Receiver Mode -->
+  <div id="receiverMode" style="display: none;">
+    <h2>Receiver Mode</h2>
+    <video id="video" autoplay></video>
+    <div class="status" id="scannerStatus">Initializing...</div>
+  </div>
+
+  <!-- Log -->
+  <div class="log" id="log">Log will appear here...</div>
+
+  <script>
+    // Global Variables
+    let currentMode = "sender";
+    let video = document.getElementById("video");
+    let qrCanvas = document.getElementById("qrCanvas");
+    let fileInput = document.getElementById("fileInput");
+    let logContainer = document.getElementById("log");
+    let scannerStatus = document.getElementById("scannerStatus");
+    let stream;
+    let scanInterval;
+
+    // Helper: Log Debug Messages
     function logDebug(message) {
-      const logMessage = document.createElement('div');
+      const logMessage = document.createElement("div");
       logMessage.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
       logContainer.appendChild(logMessage);
       logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // Switch Mode
+    document.getElementById("switchMode").addEventListener("click", function () {
+      if (currentMode === "sender") {
+        switchToReceiverMode();
+      } else {
+        switchToSenderMode();
+      }
+    });
+
+    function switchToSenderMode() {
+      logDebug("Switched to Sender Mode.");
+      document.getElementById("senderMode").style.display = "block";
+      document.getElementById("receiverMode").style.display = "none";
+      document.getElementById("switchMode").textContent = "Switch to Receiver Mode";
+      currentMode = "sender";
+      stopCamera();
+    }
+
+    function switchToReceiverMode() {
+      logDebug("Switched to Receiver Mode.");
+      document.getElementById("senderMode").style.display = "none";
+      document.getElementById("receiverMode").style.display = "block";
+      document.getElementById("switchMode").textContent = "Switch to Sender Mode";
+      currentMode = "receiver";
+      startCamera();
     }
 
     // Start Camera
@@ -85,14 +140,14 @@
       scannerStatus.textContent = "Camera stopped.";
     }
 
-    // Start QR Code Scanning
+    // QR Code Scanning
     function startScanning() {
       logDebug("Starting QR Code scanning...");
       scannerStatus.textContent = "Scanning...";
       scanInterval = setInterval(() => {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -112,8 +167,30 @@
       }, 500); // Scan every 500ms
     }
 
-    // Initialize App
-    startCamera();
+    // QR Code Generation
+    fileInput.addEventListener("change", function () {
+      const file = fileInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const fileData = e.target.result;
+          logDebug("File selected: " + file.name);
+          QRCode.toCanvas(qrCanvas, fileData, function (error) {
+            if (error) {
+              logDebug("Error generating QR Code: " + error.message);
+              document.getElementById("qrStatus").textContent = "Error generating QR Code.";
+            } else {
+              logDebug("QR Code generated successfully.");
+              document.getElementById("qrStatus").textContent = "QR Code generated.";
+            }
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Initialize in Sender Mode
+    switchToSenderMode();
   </script>
 </body>
 </html>
